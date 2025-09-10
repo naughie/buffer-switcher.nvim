@@ -163,9 +163,10 @@ impl<'a> Iterator for RankingIntoIter<'a> {
     }
 }
 
-fn score_substring(item: &Buffer, ridx: usize) -> Score {
-    let rest = item.file.len() - ridx;
-    Score(rest.try_into().unwrap_or(u16::MAX))
+fn score_substring(item: &Buffer, idx: usize) -> Score {
+    let penalty = item.file.len() - idx;
+    let penalty = penalty.try_into().unwrap_or(u16::MAX);
+    Score(u16::MAX - penalty)
 }
 
 fn score_fuzzy(item: &Buffer, input: &str) -> Option<(Score, Match)> {
