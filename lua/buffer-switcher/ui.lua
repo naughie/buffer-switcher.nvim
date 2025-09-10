@@ -5,7 +5,7 @@ local hl = require("buffer-switcher.highlight")
 local mkstate = require("glocal-states")
 local myui = require("my-ui")
 
-local states = mkstate.tab()
+local states = {}
 
 local api = vim.api
 
@@ -101,7 +101,7 @@ local function render_buf_item(buf_item, start_line, max_width)
     return line, ext
 end
 
-local function render_items(items, lines, exts, current_states, title)
+local function render_items(items, lines, exts, title)
     local title_virt = {
         virt_text = title,
         pos = "overlay",
@@ -111,7 +111,7 @@ local function render_items(items, lines, exts, current_states, title)
     }
     table.insert(exts, { title_virt })
 
-    local hor_total_width = current_states.max_width + 2 * frame.padding
+    local hor_total_width = states.max_width + 2 * frame.padding
     local frame_hor_rep = math.floor(hor_total_width / frame_len.hor.width)
     local frame_hor = string.rep(frame.hor, frame_hor_rep)
     local frame_hor_len = frame_len.hor.len * frame_hor_rep + 2 * frame_len.vert.len
@@ -125,7 +125,7 @@ local function render_items(items, lines, exts, current_states, title)
     table.insert(lines, frame.corners[2] .. frame_hor .. frame.corners[1])
 
     for _, buf_item in ipairs(items) do
-        local line, ext = render_buf_item(buf_item, #lines, current_states.max_width)
+        local line, ext = render_buf_item(buf_item, #lines, states.max_width)
         table.insert(lines, line)
         table.insert(exts, ext)
     end
@@ -143,9 +143,13 @@ local function render_items(items, lines, exts, current_states, title)
     return lines, exts
 end
 
+local function buf_item_table(buf_item)
+    local matched = buf_item[4] ~= nil and #buf_item[4] > 0
+    return { buf = buf_item[1], tab = buf_item[3][1], matched = matched, rendered = buf_item[2] }
+end
+
 local function update_states(buffers)
-    local current_states = states.get()
-    local calc_width = not current_states or current_states.max_width == nil
+    local calc_width = states.max_width == nil
 
     local current_tab = {}
     local other_tabs = {}
@@ -153,16 +157,14 @@ local function update_states(buffers)
     local max_width = 0
 
     for _, buf_item in ipairs(buffers.current_tab) do
-        local matched = buf_item[4] ~= nil and #buf_item[4] > 0
-        table.insert(current_tab, { buf = buf_item[1], tab = buf_item[3][1], matched = matched })
+        table.insert(current_tab, buf_item_table(buf_item))
         if calc_width then
             max_width = math.max(max_width, vim.fn.strwidth(buf_item[2]))
         end
     end
 
     for _, buf_item in ipairs(buffers.other_tabs) do
-        local matched = buf_item[4] ~= nil and #buf_item[4] > 0
-        table.insert(other_tabs, { buf = buf_item[1], tab = buf_item[3][1], matched = matched })
+        table.insert(other_tabs, buf_item_table(buf_item))
         if calc_width then
             max_width = math.max(max_width, vim.fn.strwidth(buf_item[2]))
         end
@@ -178,39 +180,55 @@ local function update_states(buffers)
         end
     end
 
-    if current_states then
-        if calc_width then
-            current_states.max_width = max_width
+    if calc_width then
+        states.max_width = max_width
+    end
+
+    states.items = {
+        current_tab = current_tab,
+        other_tabs = other_tabs,
+    }
+
+    states.selected = nil
+    if #current_tab > 0 then
+        local buf_item = current_tab[1]
+        if buf_item.matched then
+            states.selected = 1
         end
+    end
+end
 
-        current_states.items = {
-            current_tab = current_tab,
-            other_tabs = other_tabs,
-        }
+local function set_selected_hl(buf_id)
+    local old_ext_id = states.selected_ext_id
+    if old_ext_id then
+        hl.delete_extmark(buf_id, old_ext_id)
+    end
 
-        return current_states
+    if states.selected then
+        local buf_item = states.items.current_tab[states.selected]
+
+        local padding = 2
+        local start_col = frame_len.vert.len + frame.padding - padding
+        local end_col = start_col + string.len(buf_item.rendered) + 2 * padding
+
+        states.selected_ext_id = hl.set_extmark.cursor(buf_id, {
+            start_col = start_col,
+            end_col = end_col,
+            line = states.selected,
+        })
     else
-        local new_states = {
-            max_width = max_width,
-            items = {
-                current_tab = current_tab,
-                other_tabs = other_tabs,
-            },
-        }
-        states.set(new_states)
-
-        return new_states
+        states.selected_ext_id = nil
     end
 end
 
 function M.render_results(buffers)
-    local current_states = update_states(buffers)
+    update_states(buffers)
 
     local lines = {}
     local exts = {}
 
-    lines, exts = render_items(buffers.current_tab, lines, exts, current_states, frame.titles[1])
-    lines, exts = render_items(buffers.other_tabs, lines, exts, current_states, frame.titles[2])
+    lines, exts = render_items(buffers.current_tab, lines, exts, frame.titles[1])
+    lines, exts = render_items(buffers.other_tabs, lines, exts, frame.titles[2])
 
     local buf_id = ui.main.get_buf()
     if not buf_id then return end
@@ -223,9 +241,7 @@ function M.render_results(buffers)
         end
     end
 
-    local win_id = ui.main.get_win()
-    if not win_id then return end
-    api.nvim_win_set_cursor(win_id, { 2, 0 })
+    set_selected_hl(buf_id)
 end
 
 function M.open_results()
@@ -236,7 +252,7 @@ function M.open_results()
     ui.main.set_lines(0, -1, false, {})
     ui.main.open_float()
 
-    states.clear()
+    states = {}
 end
 
 function M.open_input(setup)
@@ -262,23 +278,59 @@ function M.close()
 end
 
 function M.open_selected_buf()
-    local win_id = ui.main.get_win()
-    if not win_id then return end
-    local cursor = api.nvim_win_get_cursor(win_id)
-    local line = cursor[1] - 1
+    if not states.selected then return end
 
-    if line <= 0 then return end
-    local current_states = states.get()
-    if not current_states or line > #current_states.items.current_tab then return end
-
-    local buf_item = current_states.items.current_tab[line]
-    if not buf_item.matched then return end
+    local buf_item = states.items.current_tab[states.selected]
     local buf_id = buf_item.buf
 
     vim.cmd("stopinsert")
     myui.focus_on_last_active_win()
     myui.close_all()
     api.nvim_set_current_buf(buf_id)
+end
+
+local function select_new_buf_item(find)
+    local current_selected = states.selected
+    if not current_selected then return end
+    states.selected = find(current_selected, states.items.current_tab)
+
+    local buf_id = ui.main.get_buf()
+    if not buf_id then return end
+    set_selected_hl(buf_id)
+end
+
+local function find_next_selected(current, items)
+    local next_idx = current + 1
+    local next_item = items[next_idx]
+
+    if next_item and next_item.matched then
+        return next_idx
+    else
+        return 1
+    end
+end
+
+function M.select_next()
+    select_new_buf_item(find_next_selected)
+end
+
+local function find_prev_selected(current, items)
+    local prev_idx = current - 1
+
+    if prev_idx == 0 then
+        for i = #items, 1, -1 do
+            local buf_item = items[i]
+            if buf_item.matched then
+                return i
+            end
+        end
+    else
+        return prev_idx
+    end
+end
+
+function M.select_prev()
+    select_new_buf_item(find_prev_selected)
 end
 
 M.update_opts = ui.update_opts

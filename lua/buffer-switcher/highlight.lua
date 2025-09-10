@@ -5,12 +5,14 @@ local api = vim.api
 local ns = api.nvim_create_namespace("NaughieBufferSwitcherHl")
 
 local default_hl = {
+    cursor = { link = "CursorLine" },
     matched = { link = "Search" },
     frame = { link = "FloatBorder" },
     frame_title = { link = "Normal" },
 }
 
 local hl_names = {
+    cursor = "BufferSwitcherCursor",
     matched = "BufferSwitcherMatched",
     frame = "BufferSwitcherFrame",
     frame_title = "BufferSwitcherFrameTitle",
@@ -48,7 +50,10 @@ for key, hl in pairs(hl_names) do
             return api.nvim_buf_set_extmark(buf, ns, args.line, args.start_col, opts)
         end
     end
+end
 
+M.delete_extmark = function(buf, ext_id)
+    api.nvim_buf_del_extmark(buf, ns, ext_id)
 end
 
 M.clear_extmarks = function(buf)

@@ -96,6 +96,8 @@ M.fn = {
     end,
 
     open_selected_buf = ui.open_selected_buf,
+    select_next = ui.select_next,
+    select_prev = ui.select_prev,
 
     close = ui.close,
 }
