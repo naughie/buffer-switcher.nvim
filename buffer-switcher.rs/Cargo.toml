@@ -1,0 +1,8 @@
+[package]
+name = "buffer-switcher-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nvim-router = { git = "https://github.com/naughie/nvim-router.rs.git", branch = "main", features = ["tokio"] }
+tokio = { version = "1", features = ["sync"] }
