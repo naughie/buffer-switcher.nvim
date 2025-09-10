@@ -77,7 +77,7 @@ M.fn = {
         local buffers = ls.get_buffers()
         rpc.call.update_buffers(buffers)
 
-        ui.open_results()
+        ui.open_results(buffers)
         ui.open_input(function(buf)
             local text_changed = api.nvim_create_augroup("NaughieBufferSwitcherTextChanged", { clear = true }),
             api.nvim_create_autocmd("TextChangedI", {

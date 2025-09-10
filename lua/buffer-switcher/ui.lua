@@ -46,7 +46,6 @@ local ui = myui.declare_ui({
     geom = {
         main = {
             width = function() return math.floor(api.nvim_get_option("columns") * 0.25) end,
-            height = function() return math.floor(api.nvim_get_option("lines") * 0.4) end,
         },
         companion = {
             width = function() return math.floor(api.nvim_get_option("columns") * 0.25) end,
@@ -244,12 +243,15 @@ function M.render_results(buffers)
     set_selected_hl(buf_id)
 end
 
-function M.open_results()
+function M.open_results(buffers)
     ui.main.create_buf()
     local buf = ui.main.get_buf()
     if not buf then return end
     hl.clear_extmarks(buf)
     ui.main.set_lines(0, -1, false, {})
+
+    local height = #buffers.current_tab + #buffers.other_tabs + 4
+    ui.update_opts({ geom = { main = { height = height } } })
     ui.main.open_float()
 
     states = {}
