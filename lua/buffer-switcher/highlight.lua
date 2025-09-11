@@ -17,6 +17,7 @@ local hl_names = {
     frame = "BufferSwitcherFrame",
     frame_title = "BufferSwitcherFrameTitle",
 }
+M.hl_groups = hl_names
 
 function M.set_highlight_groups(opts)
     for key, hl in pairs(hl_names) do
@@ -58,6 +59,13 @@ end
 
 M.clear_extmarks = function(buf)
     api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+end
+
+M.set_extmark.virt_lines = function(buf, opts)
+    api.nvim_buf_set_extmark(buf, ns, opts.line, 0, {
+        virt_lines = { opts.virt_line },
+        invalidate = true,
+    })
 end
 
 return M

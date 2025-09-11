@@ -16,8 +16,8 @@ local frame = {
     corners = { "╮", "╭", "╰", "╯" },
 
     titles = {
-        " Current Tab ",
-        " Other Tabs ",
+        " ꒰Current Tab ꒱",
+        " ꒰Other Tabs ꒱",
     },
 }
 local frame_len = {
@@ -240,6 +240,29 @@ function M.render_results(buffers)
         end
     end
 
+    if #states.items.current_tab ~= 1 then
+        local virt_line = {
+            {
+                frame.vert,
+                hl.hl_groups.frame,
+            },
+            {
+                string.rep(" ", states.max_width + 2 * frame.padding),
+                "non-existing-hl",
+            },
+            {
+                frame.vert,
+                hl.hl_groups.frame,
+            },
+        }
+
+        local line = 0
+        if #states.items.current_tab > 1 and states.items.current_tab[1].matched then
+            line = 1
+        end
+        hl.set_extmark.virt_lines(buf_id, { line = line, virt_line = virt_line })
+    end
+
     set_selected_hl(buf_id)
 end
 
@@ -251,6 +274,9 @@ function M.open_results(buffers)
     ui.main.set_lines(0, -1, false, {})
 
     local height = #buffers.current_tab + #buffers.other_tabs + 4
+    if #buffers.current_tab ~= 1 then
+        height = height + 1
+    end
     ui.update_opts({ geom = { main = { height = height } } })
     ui.main.open_float()
 
