@@ -212,6 +212,7 @@ impl Iterator for Match<'_, '_> {
             }
         }
 
+        self.pat_peek = '\0';
         Some(ControlFlow::Break(item))
     }
 }
