@@ -79,7 +79,7 @@ M.fn = {
 
         ui.open_results(buffers)
         ui.open_input(function(buf)
-            local text_changed = api.nvim_create_augroup("NaughieBufferSwitcherTextChanged", { clear = true }),
+            local text_changed = api.nvim_create_augroup("NaughieBufferSwitcherTextChanged", { clear = true })
             api.nvim_create_autocmd("TextChangedI", {
                 group = augroup,
                 buffer = buf,
