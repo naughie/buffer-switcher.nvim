@@ -86,9 +86,9 @@ mod norm {
     }
 
     fn filter_char(c: char) -> Option<char> {
-        if c == '\t' {
+        if c.is_whitespace() {
             Some(' ')
-        } else if c < ' ' {
+        } else if c.is_control() {
             None
         } else {
             Some(c)
@@ -181,8 +181,12 @@ impl Iterator for Match<'_, '_> {
     type Item = ControlFlow<MatchItem, MatchItem>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        fn eq_char(this: char, that: char) -> bool {
-            this.to_lowercase().eq(that.to_lowercase())
+        fn eq_char(target: char, pat: char) -> bool {
+            if pat.is_uppercase() {
+                target == pat
+            } else {
+                target.to_lowercase().eq(pat.to_lowercase())
+            }
         }
 
         if self.pat_peek == '\0' {
@@ -283,6 +287,11 @@ mod tests {
         expect_matches("ABCD", "abcd", [(0..4, 0)]);
         expect_matches("A\tB\0\u{3}CD", "a bcd", [(0..5, 0)]);
         expect_matches("ΑΒΗ", "αβη", [(0..("ΑΒΗ".len()), 0)]);
+
+        expect_matches("aBH", "Abh", []);
+        expect_matches("ABH", "Abh", [(0..3, 0)]);
+        expect_matches("αΒΗ", "Αβη", []);
+        expect_matches("ΑΒΗ", "Αβη", [(0..("ΑΒΗ".len()), 0)]);
     }
 
     #[test]
