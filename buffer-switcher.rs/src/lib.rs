@@ -32,7 +32,7 @@ impl States {
         self.other_tabs = to_list(other_tabs, cwd, home_dir);
     }
 
-    fn ranking(&self, input: &Pattern) -> Value {
+    fn ranking(&self, input: Pattern) -> Value {
         let current_tab = ranking_to_args(rank(&self.current_tab, input));
         let other_tabs = ranking_to_args(rank(&self.other_tabs, input));
         Value::Map(vec![
@@ -123,10 +123,10 @@ impl<W: NeovimWriter> nvim_router::NeovimHandler<W> for NeovimHandler {
             let Some(input) = args.next_string() else {
                 return Ok(Value::Nil);
             };
-            let input = Pattern::from_string(input);
+            let input = Pattern::from_str(&input);
 
             let lock = self.states.lock().await;
-            let ret = lock.ranking(&input);
+            let ret = lock.ranking(input);
             Ok(ret)
         } else {
             Ok(Value::Nil)

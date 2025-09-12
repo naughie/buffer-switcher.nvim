@@ -1,14 +1,14 @@
 use norm::Chars;
-use norm::Norm;
+use norm::{NormAlloc, NormInplace};
 mod norm {
     use std::str::CharIndices;
 
     #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-    pub(super) struct Norm {
+    pub(super) struct NormAlloc {
         inner: String,
     }
 
-    impl Norm {
+    impl NormAlloc {
         pub(super) fn len(&self) -> usize {
             self.inner.len()
         }
@@ -46,12 +46,30 @@ mod norm {
         }
     }
 
-    pub(super) fn is_empty(s: &str) -> bool {
-        s.chars().all(|c| filter_char(c).is_none())
+    #[derive(Clone, Copy)]
+    pub(super) struct NormInplace<'a> {
+        inner: &'a str,
+    }
+
+    impl<'a> NormInplace<'a> {
+        pub(super) fn from_str(s: &'a str) -> Self {
+            let inner = s.trim_matches(|c: char| filter_char(c).is_none());
+            Self { inner }
+        }
+
+        pub(super) fn is_empty(self) -> bool {
+            self.inner.is_empty()
+        }
+
+        pub(super) fn chars(self) -> Chars<'a> {
+            Chars {
+                chars: self.inner.chars(),
+            }
+        }
     }
 
     pub(super) struct Chars<'a> {
-        pub(super) chars: std::str::Chars<'a>,
+        chars: std::str::Chars<'a>,
     }
 
     impl Iterator for Chars<'_> {
@@ -85,13 +103,13 @@ use std::str::CharIndices;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct Target {
-    display_name: Norm,
+    display_name: NormAlloc,
 }
 
 impl Target {
     pub(super) fn with_capacity(cap: usize) -> Self {
         Self {
-            display_name: Norm::with_capacity(cap),
+            display_name: NormAlloc::with_capacity(cap),
         }
     }
 
@@ -105,7 +123,7 @@ impl Target {
 
     pub(super) fn from_str(s: &str) -> Self {
         Self {
-            display_name: Norm::from_str(s),
+            display_name: NormAlloc::from_str(s),
         }
     }
 
@@ -118,27 +136,24 @@ impl Target {
     }
 }
 
-pub(super) struct Pattern {
-    inner: String,
+#[derive(Clone, Copy)]
+pub(super) struct Pattern<'a> {
+    inner: NormInplace<'a>,
 }
 
-impl Pattern {
-    pub(super) fn from_string(inner: String) -> Self {
-        Self { inner }
-    }
-
-    pub(super) fn is_empty(&self) -> bool {
-        norm::is_empty(&self.inner)
-    }
-
-    fn chars(&self) -> Chars<'_> {
-        Chars {
-            chars: self.inner.chars(),
+impl<'a> Pattern<'a> {
+    pub(super) fn from_str(inner: &'a str) -> Self {
+        Self {
+            inner: NormInplace::from_str(inner),
         }
     }
 
+    pub(super) fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
     pub(super) fn test<'p, 't>(&'p self, target: &'t Target) -> Match<'p, 't> {
-        let mut pat = self.chars();
+        let mut pat = self.inner.chars();
         let pat_peek = pat.next_back().unwrap_or_default();
         Match {
             pat,
@@ -203,7 +218,7 @@ mod tests {
 
     fn expect_matches(target: &str, pat: &str, expected: impl IntoIterator<Item = (Range, usize)>) {
         let target = Target::from_str(target);
-        let pat = Pattern::from_string(pat.to_string());
+        let pat = Pattern::from_str(pat);
 
         let expected = expected
             .into_iter()
@@ -272,8 +287,8 @@ mod tests {
 
     #[test]
     fn pattern_is_empty() {
-        assert!(Pattern::from_string(String::from("")).is_empty());
-        assert!(Pattern::from_string(String::from("\0\0\0")).is_empty());
-        assert!(!Pattern::from_string(String::from("abc")).is_empty());
+        assert!(Pattern::from_str("").is_empty());
+        assert!(Pattern::from_str("\0\0\0").is_empty());
+        assert!(!Pattern::from_str("abc").is_empty());
     }
 }

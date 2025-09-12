@@ -172,7 +172,7 @@ impl<'a> Iterator for RankingIntoIter<'a> {
     }
 }
 
-pub(super) fn rank<'a>(buffers: &'a BufferList, input: &Pattern) -> RankedItems<'a> {
+pub(super) fn rank<'a>(buffers: &'a BufferList, input: Pattern) -> RankedItems<'a> {
     if input.is_empty() {
         let mut ranking = RankedItems {
             nonmatch: buffers
