@@ -1,6 +1,9 @@
 mod buffer_list;
 use buffer_list::{Buffer, BufferId, BufferList};
 
+mod pattern;
+use pattern::{Pattern, Target};
+
 mod rank;
 use rank::{Item as RankingItem, rank};
 
@@ -29,7 +32,7 @@ impl States {
         self.other_tabs = to_list(other_tabs, cwd, home_dir);
     }
 
-    fn ranking(&self, input: &str) -> Value {
+    fn ranking(&self, input: &Pattern) -> Value {
         let current_tab = ranking_to_args(rank(&self.current_tab, input));
         let other_tabs = ranking_to_args(rank(&self.other_tabs, input));
         Value::Map(vec![
@@ -50,17 +53,17 @@ fn to_list(buffers: Vec<Value>, cwd: &str, home_dir: &str) -> BufferList {
                 && let Some(metadata) = buf_item.get(2)
             {
                 let path = if let Some(rest) = path.strip_prefix(cwd) {
-                    let mut path = String::with_capacity(rest.len() + 1);
+                    let mut path = Target::with_capacity(rest.len() + 1);
                     path.push('.');
                     path.push_str(rest);
                     path
                 } else if let Some(rest) = path.strip_prefix(home_dir) {
-                    let mut path = String::with_capacity(rest.len() + 1);
+                    let mut path = Target::with_capacity(rest.len() + 1);
                     path.push('~');
                     path.push_str(rest);
                     path
                 } else {
-                    path.to_owned()
+                    Target::from_str(path)
                 };
 
                 Some(Buffer {
@@ -91,7 +94,7 @@ fn ranking_to_args<'a>(ranking: impl IntoIterator<Item = RankingItem<'a>>) -> Va
                 .collect();
             Value::Array(vec![
                 Value::from(item.buf_id),
-                Value::from(item.content),
+                Value::from(item.content.display_name()),
                 item.metadata,
                 Value::Array(matched),
             ])
@@ -120,6 +123,7 @@ impl<W: NeovimWriter> nvim_router::NeovimHandler<W> for NeovimHandler {
             let Some(input) = args.next_string() else {
                 return Ok(Value::Nil);
             };
+            let input = Pattern::from_string(input);
 
             let lock = self.states.lock().await;
             let ret = lock.ranking(&input);

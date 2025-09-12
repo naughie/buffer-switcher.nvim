@@ -1,9 +1,11 @@
 use crate::buffer_list::{Buffer, BufferId, BufferList};
+use crate::pattern::{Pattern, Target};
 
 use nvim_router::nvim_rs::Value;
 
 use std::cmp::Ordering;
 use std::iter::Rev;
+use std::ops::ControlFlow;
 use std::ops::Range;
 
 type VecIntoIter<T> = <Vec<T> as IntoIterator>::IntoIter;
@@ -11,10 +13,17 @@ type VecIntoIter<T> = <Vec<T> as IntoIterator>::IntoIter;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct Score(u16);
 
+impl Score {
+    fn with_penalty(penalty: usize) -> Self {
+        let penalty = penalty.try_into().unwrap_or(u16::MAX);
+        Score(u16::MAX - penalty)
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct Item<'a> {
     pub(super) buf_id: BufferId,
-    pub(super) content: &'a str,
+    pub(super) content: &'a Target,
     score: Score,
     pub(super) metadata: Value,
     pub(super) matched: Match,
@@ -163,47 +172,7 @@ impl<'a> Iterator for RankingIntoIter<'a> {
     }
 }
 
-fn score_substring(item: &Buffer, idx: usize) -> Score {
-    let penalty = item.file.len() - idx;
-    let penalty = penalty.try_into().unwrap_or(u16::MAX);
-    Score(u16::MAX - penalty)
-}
-
-fn score_fuzzy(item: &Buffer, input: &str) -> Option<(Score, Match)> {
-    let mut target = item.file.as_bytes();
-    if target.is_empty() || input.is_empty() {
-        return None;
-    }
-
-    let mut penalty = 0usize;
-    let mut ranges: Vec<Range<usize>> = Vec::new();
-
-    for &b in input.as_bytes().iter().rev() {
-        let idx = target
-            .iter()
-            .enumerate()
-            .rev()
-            .find_map(|(i, &test)| if test == b { Some(i) } else { None })?;
-
-        penalty += target.len() - idx;
-        target = &target[..idx];
-
-        if let Some(range) = ranges.last_mut() {
-            if range.start == idx + 1 {
-                range.start = idx;
-            } else {
-                ranges.push(idx..(idx + 1));
-            }
-        } else {
-            ranges.push(idx..(idx + 1));
-        }
-    }
-
-    let penalty = penalty.try_into().unwrap_or(u16::MAX);
-    Some((Score(u16::MAX - penalty), Match::Fuzzy(ranges)))
-}
-
-pub(super) fn rank<'a>(buffers: &'a BufferList, input: &str) -> RankedItems<'a> {
+pub(super) fn rank<'a>(buffers: &'a BufferList, input: &Pattern) -> RankedItems<'a> {
     if input.is_empty() {
         let mut ranking = RankedItems {
             nonmatch: buffers
@@ -219,27 +188,53 @@ pub(super) fn rank<'a>(buffers: &'a BufferList, input: &str) -> RankedItems<'a> 
 
     let mut ranking = RankedItems::default();
 
-    for target in buffers {
-        if target.file.ends_with(input) {
-            let len = target.file.len();
-            ranking.end_with.push(Item::from(
-                target,
-                Score(0),
-                Match::Sub((len - input.len())..len),
-            ));
-        } else if let Some(idx) = target.file.rfind(input) {
-            let score = score_substring(target, idx);
-            ranking.substring.push(Item::from(
-                target,
-                score,
-                Match::Sub(idx..(idx + input.len())),
-            ));
-        } else if let Some((score, matched)) = score_fuzzy(target, input) {
-            ranking.fuzzy.push(Item::from(target, score, matched));
-        } else {
-            ranking
-                .nonmatch
-                .push(Item::from(target, Score(0), Match::None));
+    't: for target in buffers {
+        let mut tester = input.test(&target.file);
+
+        match tester.next() {
+            Some(ControlFlow::Break(item)) => {
+                if item.roffset == 0 {
+                    ranking
+                        .end_with
+                        .push(Item::from(target, Score(0), Match::Sub(item.range)));
+                } else {
+                    ranking.substring.push(Item::from(
+                        target,
+                        Score::with_penalty(item.roffset),
+                        Match::Sub(item.range),
+                    ));
+                }
+            }
+            Some(ControlFlow::Continue(item)) => {
+                let mut matched = vec![item.range];
+
+                for item in tester {
+                    match item {
+                        ControlFlow::Break(item) => {
+                            let penalty = item.roffset + (item.range.end - item.range.start);
+                            let score = Score::with_penalty(penalty);
+
+                            matched.push(item.range);
+
+                            ranking
+                                .fuzzy
+                                .push(Item::from(target, score, Match::Fuzzy(matched)));
+                            continue 't;
+                        }
+                        ControlFlow::Continue(item) => {
+                            matched.push(item.range);
+                        }
+                    }
+                }
+                ranking
+                    .nonmatch
+                    .push(Item::from(target, Score(0), Match::None));
+            }
+            None => {
+                ranking
+                    .nonmatch
+                    .push(Item::from(target, Score(0), Match::None));
+            }
         }
     }
 

@@ -1,3 +1,5 @@
+use crate::pattern::Target;
+
 use nvim_router::nvim_rs::Value;
 
 use std::cmp::Ordering;
@@ -48,7 +50,7 @@ impl BufferId {
 #[derive(Debug)]
 pub(super) struct Buffer {
     pub(super) id: BufferId,
-    pub(super) file: String,
+    pub(super) file: Target,
     pub(super) metadata: Value,
 }
 
