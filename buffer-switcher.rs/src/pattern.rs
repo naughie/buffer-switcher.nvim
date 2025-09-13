@@ -68,6 +68,7 @@ mod norm {
         }
     }
 
+    #[derive(Clone)]
     pub(super) struct Chars<'a> {
         chars: std::str::Chars<'a>,
     }
@@ -152,14 +153,22 @@ impl<'a> Pattern<'a> {
         self.inner.is_empty()
     }
 
-    pub(super) fn test<'p, 't>(&'p self, target: &'t Target) -> Match<'p, 't> {
+    fn fuzzy<'p, 't>(&'p self, target: &'t Target) -> FuzzyMatch<'p, 't> {
         let mut pat = self.inner.chars();
         let pat_peek = pat.next_back().unwrap_or_default();
-        Match {
+        FuzzyMatch {
             pat,
             pat_peek,
             target: target.display_name.char_indices(),
             target_len: target.display_name.len(),
+        }
+    }
+
+    pub(super) fn test<'p, 't>(&'p self, target: &'t Target) -> Match<'p, 't> {
+        if let Some(sub) = SubMatch::from(self, target) {
+            Match::Sub(sub)
+        } else {
+            Match::Fuzzy(self.fuzzy(target))
         }
     }
 }
@@ -170,25 +179,84 @@ pub(super) struct MatchItem {
     pub(super) roffset: usize,
 }
 
-pub(super) struct Match<'p, 't> {
-    pat: Chars<'p>,
-    pat_peek: char,
-    target: CharIndices<'t>,
-    target_len: usize,
+pub(super) enum Match<'p, 't> {
+    Sub(SubMatch),
+    Fuzzy(FuzzyMatch<'p, 't>),
 }
 
 impl Iterator for Match<'_, '_> {
     type Item = ControlFlow<MatchItem, MatchItem>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        fn eq_char(target: char, pat: char) -> bool {
-            if pat.is_uppercase() {
-                target == pat
-            } else {
-                target.to_lowercase().eq(pat.to_lowercase())
+        match self {
+            Self::Sub(it) => it.next(),
+            Self::Fuzzy(it) => it.next(),
+        }
+    }
+}
+
+pub(super) struct SubMatch {
+    inner: std::iter::Once<MatchItem>,
+}
+
+impl SubMatch {
+    fn from(pattern: &Pattern, target: &Target) -> Option<Self> {
+        let mut pat = pattern.inner.chars();
+        let first_pat = pat.next_back()?;
+
+        let target_len = target.display_name.len();
+        let mut target = target.display_name.char_indices();
+
+        'out: while let Some((i, target_char)) = target.next_back() {
+            if !eq_char(target_char, first_pat) {
+                continue;
             }
+
+            let mut start = i;
+            let end = i + target_char.len_utf8();
+
+            let mut target = target.clone();
+            let pat = pat.clone();
+
+            for pat in pat.rev() {
+                let (i, target) = target.next_back()?;
+                if !eq_char(target, pat) {
+                    continue 'out;
+                }
+                start = i;
+            }
+
+            return Some(SubMatch {
+                inner: std::iter::once(MatchItem {
+                    range: start..end,
+                    roffset: target_len - end,
+                }),
+            });
         }
 
+        None
+    }
+}
+
+impl Iterator for SubMatch {
+    type Item = ControlFlow<MatchItem, MatchItem>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(ControlFlow::Break)
+    }
+}
+
+pub(super) struct FuzzyMatch<'p, 't> {
+    pat: Chars<'p>,
+    pat_peek: char,
+    target: CharIndices<'t>,
+    target_len: usize,
+}
+
+impl Iterator for FuzzyMatch<'_, '_> {
+    type Item = ControlFlow<MatchItem, MatchItem>;
+
+    fn next(&mut self) -> Option<Self::Item> {
         if self.pat_peek == '\0' {
             return None;
         }
@@ -214,6 +282,14 @@ impl Iterator for Match<'_, '_> {
 
         self.pat_peek = '\0';
         Some(ControlFlow::Break(item))
+    }
+}
+
+fn eq_char(target: char, pat: char) -> bool {
+    if pat.is_uppercase() {
+        target == pat
+    } else {
+        target.to_lowercase().eq(pat.to_lowercase())
     }
 }
 
@@ -274,6 +350,8 @@ mod tests {
         expect_matches("abcd", "c", [(2..3, 1)]);
         expect_matches("abcd", "bc", [(1..3, 1)]);
         expect_matches("abcd", "ab", [(0..2, 2)]);
+
+        expect_matches("abcdbc", "abc", [(0..3, 3)]);
     }
 
     #[test]
