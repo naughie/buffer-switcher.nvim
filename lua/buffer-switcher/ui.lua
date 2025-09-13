@@ -189,7 +189,9 @@ local function update_states(buffers)
     }
 
     states.selected = nil
-    if #current_tab > 0 then
+    if #current_tab == 1 then
+        states.selected = 1
+    elseif #current_tab > 1 then
         local buf_item = current_tab[1]
         if buf_item.matched then
             states.selected = 1
@@ -352,6 +354,7 @@ local function find_prev_selected(current, items)
                 return i
             end
         end
+        return current
     else
         return prev_idx
     end
