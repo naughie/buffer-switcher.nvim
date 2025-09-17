@@ -30,6 +30,30 @@ function M.get_buffers()
     }
 end
 
+local function update_with_api()
+    local current_bufs = {}
+
+    for _, buf in ipairs(api.nvim_list_bufs()) do
+        if api.nvim_buf_is_loaded(buf) then
+            local name = api.nvim_buf_get_name(buf)
+            if name ~= "" then
+                current_bufs[name] = buf
+            end
+        end
+    end
+
+    if not next(current_bufs) then return end
+
+    local buffers_in_tab = buffers.get()
+    if buffers_in_tab then
+        for name, buf_id in pairs(current_bufs) do
+            buffers_in_tab[name] = buf_id
+        end
+    else
+        buffers.set(current_bufs)
+    end
+end
+
 function M.autocmd()
     local augroup = api.nvim_create_augroup("NaughieBufferSwitcherLs", { clear = true }),
 
@@ -51,5 +75,7 @@ function M.autocmd()
         end,
     })
 end
+
+M.on_startup = update_with_api
 
 return M

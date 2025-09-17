@@ -64,6 +64,8 @@ function M.setup(opts)
         ui.update_opts({ background = opts.border })
     end
 
+    ls.on_startup()
+
     M.define_keymaps(opts.keymaps)
     ls.autocmd()
     ui.autocmd()
