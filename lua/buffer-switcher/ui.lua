@@ -210,7 +210,8 @@ local function set_selected_hl(buf_id)
 
         local padding = 2
         local start_col = frame_len.vert.len + frame.padding - padding
-        local end_col = start_col + string.len(buf_item.rendered) + 2 * padding
+        local buf_name_pad = states.max_width - vim.fn.strwidth(buf_item.rendered)
+        local end_col = start_col + string.len(buf_item.rendered) + buf_name_pad + 2 * padding
 
         states.selected_ext_id = hl.set_extmark.cursor(buf_id, {
             start_col = start_col,
